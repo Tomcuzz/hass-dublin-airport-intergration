@@ -1,13 +1,13 @@
 {
-  "domain": "hacs_dublin_airport_intergration",
+  "domain": "hacs_flight_aware_intergration",
   "name": "Dublin Airport",
   "codeowners": [
     "@tomcuzz"
   ],
   "dependencies": [],
-  "documentation": "https://github.com/Tomcuzz/hass-dublin-airport-intergration",
+  "documentation": "https://github.com/Tomcuzz/hass-flight-aware-intergration",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/Tomcuzz/hass-dublin-airport-intergration/issues",
+  "issue_tracker": "https://github.com/Tomcuzz/hass-flight-aware-intergration/issues",
   "requirements": [],
   "version": "0.0.1",
   "config_flow": true
