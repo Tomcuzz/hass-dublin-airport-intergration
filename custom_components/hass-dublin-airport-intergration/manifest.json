@@ -1,6 +1,6 @@
 {
   "domain": "hacs_flight_aware_intergration",
-  "name": "Dublin Airport",
+  "name": "Flight Aware",
   "codeowners": [
     "@tomcuzz"
   ],
