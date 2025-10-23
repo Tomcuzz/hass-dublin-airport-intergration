@@ -1,138 +1,124 @@
-# from __future__ import annotations
-# import requests
-# import datetime
-# from homeassistant.components.sensor import SensorEntity
-# from homeassistant.config_entries import ConfigEntry
-# from homeassistant.core import HomeAssistant
-# from homeassistant.helpers.entity import DeviceInfo
-# from homeassistant.helpers.entity_platform import AddEntitiesCallback
-# import logging
+# sensor.py
 
-# # Get the domain from your const.py or define it here if you skipped const.py
-# try:
-#     from .const import DOMAIN
-# except ImportError:
-#     DOMAIN = "my_sensor_integration"
+import logging
+from datetime import timedelta
+import requests
 
-# _LOGGER = logging.getLogger(__name__)
+from homeassistant.components.sensor import SensorEntity
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.const import CONF_API_KEY, CONF_SCAN_INTERVAL
+from homeassistant.helpers.entity import DeviceInfo
 
-# # --- Data Fetching Functions (Synchronous) ---
-# # These functions MUST run in the executor to avoid blocking HA.
+_LOGGER = logging.getLogger(__name__)
+DOMAIN = "flightaware_tracker"
 
-# def _get_today_tempo_state() -> str:
-#     """Synchronous function to fetch the state for today."""
-#     day_colour = "Unknown"
-#     # Check if before 6 AM to get previous day's color, as it persists until 6 AM
-#     if datetime.datetime.now().time() < datetime.time(6):
-#         today = datetime.date.today()
-#         previous_day = today - datetime.timedelta(days=1)
-#         formatted_url = previous_day.strftime('https://www.api-couleur-tempo.fr/api/jourTempo/%Y-%m-%d')
-#     else:
-#         formatted_url = "https://www.api-couleur-tempo.fr/api/jourTempo/today"
-    
-#     try:
-#         response = requests.get(formatted_url, timeout=10)
-#         response.raise_for_status() # Raise exception for bad status codes
-#         data = response.json()
-#         day_colour = data.get('libCouleur', 'Error')
-#     except requests.RequestException as e:
-#         _LOGGER.error("Failed to fetch Tempo color for today/yesterday: %s", e)
-#         day_colour = "Error"
-#     except Exception as e:
-#         _LOGGER.error("Error processing Tempo data: %s", e)
-#         day_colour = "Error"
+# --- Data Fetching Class (Centralized Logic) ---
+class FlightAwareDataUpdateCoordinator(DataUpdateCoordinator):
+    """Coordinator to fetch data from FlightAware API."""
 
-#     return day_colour
+    def __init__(self, hass, api_key):
+        """Initialize the coordinator."""
+        self._api_key = api_key
+        # The update_interval will be set when the sensor is loaded from the Config Entry
+        super().__init__(
+            hass,
+            _LOGGER,
+            name=DOMAIN,
+            update_interval=timedelta(seconds=1), # Temporary default, set by sensor later
+        )
+        self.flight_data = {}
 
-
-# def _get_tomorrow_tempo_state() -> str:
-#     """Synchronous function to fetch the state for tomorrow."""
-#     try:
-#         response = requests.get("https://www.api-couleur-tempo.fr/api/jourTempo/tomorrow", timeout=10)
-#         response.raise_for_status()
-#         data = response.json()
+    async def _async_update_data(self):
+        """Fetch data from API."""
+        # This function runs on the polling interval
         
-#         # Check if the API returned a valid color (codeJour != 0)
-#         if data.get('codeJour') != 0:
-#             return data.get('libCouleur', 'Not Set Yet')
+        # In a real integration, the flight number would be a user option 
+        # on the entity itself, or a service call, but for this simpler 
+        # design, we'll keep the input_text dependency as before, 
+        # passed into the coordinator on creation or via an update.
+        flight_number = self.hass.states.get("input_text.flight_number_to_track").state
+
+        if not flight_number:
+            raise UpdateFailed("Flight number input is empty.")
+
+        url = f"https://aeroapi.flightaware.com/aeroapi/flights/{flight_number}"
+        headers = {"x-apikey": self._api_key}
+
+        try:
+            # Use hass.async_add_executor_job for blocking network calls
+            response = await self.hass.async_add_executor_job(
+                requests.get, url, headers=headers, timeout=10
+            )
+            response.raise_for_status()
+            data = response.json()
+        except requests.exceptions.RequestException as err:
+            raise UpdateFailed(f"Error fetching data from FlightAware API: {err}") from err
+
+        predicted_arrival = None
+        if data.get('flights'):
+            flight_info = data['flights'][0]
+            # Assumed key for demonstration
+            predicted_arrival = flight_info.get('estimated_arrival_time') 
+
+        if predicted_arrival:
+            # Store the data
+            self.flight_data = {"predicted_arrival": predicted_arrival}
+            return self.flight_data
+        else:
+            raise UpdateFailed("Predicted arrival time not found in response.")
+
+
+# --- Platform Setup ---
+async def async_setup_entry(hass, entry, async_add_entities):
+    """Set up the sensor platform."""
+    
+    # Get the configuration data from the Config Entry
+    api_key = entry.data[CONF_API_KEY]
+    # Get the polling interval from options (or use the initial default if not changed)
+    interval_seconds = entry.options.get(CONF_SCAN_INTERVAL, 300) 
+    
+    # Create the coordinator and set the user-defined polling interval
+    coordinator = FlightAwareDataUpdateCoordinator(hass, api_key)
+    coordinator.update_interval = timedelta(seconds=interval_seconds)
+
+    # Initial fetch
+    await coordinator.async_config_entry_first_refresh()
+
+    async_add_entities([
+        FlightAwarePredictedArrivalSensor(coordinator)
+    ], True)
+
+# --- Sensor Entity ---
+class FlightAwarePredictedArrivalSensor(SensorEntity):
+    """Representation of a FlightAware Predicted Arrival Time sensor."""
+
+    def __init__(self, coordinator):
+        """Initialize the sensor."""
+        self.coordinator = coordinator
+        self._attr_name = "Predicted Flight Arrival Time"
+        self._attr_unique_id = f"flightaware_predicted_arrival_{coordinator.config_entry.entry_id}"
+        self._attr_icon = "mdi:airplane-landing"
+
+    @property
+    def native_value(self):
+        """Return the state of the sensor."""
+        # Get data from the coordinator's stored data
+        return self.coordinator.data.get("predicted_arrival")
+    
+    @property
+    def should_poll(self):
+        """Return True if entity should be polled. Using coordinator, so False."""
+        return False
+
+    @property
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        return self.coordinator.last_update_success
+
+    async def async_added_to_hass(self):
+        """When entity is added to hass."""
+        self.async_on_remove(self.coordinator.async_add_listener(self.async_write_ha_state))
         
-#     except requests.RequestException as e:
-#         _LOGGER.error("Failed to fetch Tempo color for tomorrow: %s", e)
-    
-#     return "Not Set Yet" # Default state
-
-
-# # --- Setup Function (Asynchronous) ---
-
-# async def async_setup_entry(
-#     hass: HomeAssistant, 
-#     entry: ConfigEntry, 
-#     async_add_entities: AddEntitiesCallback
-# ) -> None:
-#     """Set up the sensor platform."""
-    
-#     # Initialize sensors with placeholder state. The first async_update will fetch real data.
-#     sensors = [
-#         TodaySensor(hass, entry), 
-#         TomorrowSensor(hass, entry)
-#     ]
-    
-#     async_add_entities(sensors, True)
-
-
-# # --- Entity Classes (Asynchronous) ---
-
-# class TodaySensor(SensorEntity):
-#     """Todays Day Colour."""
-
-#     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
-#         """Initialize the sensor."""
-#         self.hass = hass
-#         self._attr_name = "Tempo Colour Today" 
-#         self._attr_unique_id = f"{DOMAIN}_{entry.entry_id}_today_colour"
-#         self._state = None # Start with unknown state
-#         self._attr_icon = "mdi:palette"
-#         self._attr_device_info = DeviceInfo(
-#             identifiers={(DOMAIN, entry.entry_id)},
-#             name="EDF Tempo Sensor",
-#             manufacturer="EDF",
-#             model="EDF Tempo API",
-#         )
-
-#     @property
-#     def native_value(self):
-#         """Return the state of the sensor."""
-#         return self._state
-
-#     async def async_update(self) -> None:
-#         """Fetch new state data for the sensor using the executor."""
-#         # Use hass.async_add_executor_job to run the blocking function safely
-#         self._state = await self.hass.async_add_executor_job(_get_today_tempo_state)
-
-
-# class TomorrowSensor(SensorEntity):
-#     """Tomorrow Day Colour."""
-
-#     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
-#         """Initialize the sensor."""
-#         self.hass = hass
-#         self._attr_name = "Tempo Colour Tomorrow"
-#         self._attr_unique_id = f"{DOMAIN}_{entry.entry_id}_tomorrow_colour"
-#         self._state = None # Start with unknown state
-#         self._attr_icon = "mdi:palette-outline"
-#         self._attr_device_info = DeviceInfo(
-#             identifiers={(DOMAIN, entry.entry_id)},
-#             name="EDF Tempo Sensor",
-#             manufacturer="EDF",
-#             model="EDF Tempo API",
-#         )
-
-#     @property
-#     def native_value(self):
-#         """Return the state of the sensor."""
-#         return self._state
-
-#     async def async_update(self) -> None:
-#         """Fetch new state data for the sensor using the executor."""
-#         # Use hass.async_add_executor_job to run the blocking function safely
-#         self._state = await self.hass.async_add_executor_job(_get_tomorrow_tempo_state)
+    async def async_update(self):
+        """Update the entity's data from the coordinator."""
+        await self.coordinator.async_request_refresh()
