@@ -8,9 +8,9 @@ from homeassistant.components.sensor import SensorEntity
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.const import CONF_API_KEY, CONF_SCAN_INTERVAL
 from homeassistant.helpers.entity import DeviceInfo
+from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
-DOMAIN = "flightaware_tracker"
 
 # --- Data Fetching Class (Centralized Logic) ---
 class FlightAwareDataUpdateCoordinator(DataUpdateCoordinator):
