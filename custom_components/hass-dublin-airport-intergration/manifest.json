@@ -1,0 +1,14 @@
+{
+  "domain": "hacs_dublin_airport_intergration",
+  "name": "Dublin Airport",
+  "codeowners": [
+    "@tomcuzz"
+  ],
+  "dependencies": [],
+  "documentation": "https://github.com/Tomcuzz/hass-dublin-airport-intergration",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/Tomcuzz/hass-dublin-airport-intergration/issues",
+  "requirements": [],
+  "version": "0.0.1",
+  "config_flow": true
+}
