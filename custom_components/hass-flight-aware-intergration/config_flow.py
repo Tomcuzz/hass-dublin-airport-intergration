@@ -7,9 +7,7 @@ from datetime import timedelta
 from homeassistant.core import callback
 import homeassistant.helpers.config_validation as cv
 
-# Constants (matching those in other files)
-DOMAIN = "flightaware_tracker"
-DEFAULT_SCAN_INTERVAL = 300 # 5 minutes in seconds
+from .const import DOMAIN, DEFAULT_SCAN_INTERVAL
 
 DATA_SCHEMA = vol.Schema({
     vol.Required(CONF_API_KEY): str,
