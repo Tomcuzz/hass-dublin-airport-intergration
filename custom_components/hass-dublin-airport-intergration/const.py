@@ -1,6 +1,6 @@
 from homeassistant.const import Platform
 
-DOMAIN = "hacs_dublin_airport_intergration"
+DOMAIN = "hacs_flight_aware_intergration"
 
 PLATFORMS = [
     "sensor"
