@@ -1,2 +1,2 @@
-# hass-dublin-airport-intergration
-Home Assistant Integration to get Dublin airport API 
+# hass-flight-aware-intergration
+Home Assistant Integration to get Flight Aware API Information
