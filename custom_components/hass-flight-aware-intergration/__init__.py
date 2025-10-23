@@ -3,8 +3,7 @@
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
 
-DOMAIN = "flightaware_tracker"
-PLATFORMS = ["sensor"]
+from .const import DOMAIN, PLATFORMS
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up FlightAware Tracker from a config entry."""
